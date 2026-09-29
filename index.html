@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Minimal Light Panel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom touch optimization and base resets for ultra-clean minimalism */
+        * {
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        /* Pure slider custom styling for ultra-flat look */
+        input[type=range] {
+            -webkit-appearance: none;
+            appearance: none;
+            background: rgba(255, 255, 255, 0.2);
+            height: 6px;
+            border-radius: 3px;
+            outline: none;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: #ffffff;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            border: none;
+        }
+
+        /* Gradient track for Color Temperature Slider */
+        #tempSlider {
+            background: linear-gradient(to right, #ff8a14, #ffe4ce, #d8e8ff);
+        }
+
+        /* Gradient track for Color Hue Slider */
+        #hueSlider {
+            background: linear-gradient(to right, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000);
+        }
+
+        /* Smooth UI transitions */
+        .fade-ui {
+            transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1), transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+    </style>
+</head>
+<body class="relative flex items-center justify-center">
+
+    <!-- Fullscreen Color / Light Layer -->
+    <div id="lightPanel" class="absolute inset-0 w-full h-full transition-colors duration-150" style="background-color: rgb(255, 255, 255); opacity: 1;"></div>
+
+    <!-- Hidden tap trigger overlay to toggle UI -->
+    <div id="touchTarget" class="absolute inset-0 z-10 w-full h-full"></div>
+
+    <!-- Minimalist Floating Control Bar -->
+    <div id="controlPanel" class="fade-ui z-20 fixed bottom-8 sm:bottom-12 max-w-md w-[90%] bg-black/40 backdrop-blur-md rounded-3xl p-6 text-white shadow-2xl border border-white/10 opacity-100 transform translate-y-0">
+        
+        <!-- Header / Presets Row -->
+        <div class="flex items-center justify-between mb-6">
+            <span id="modeLabel" class="text-xs uppercase tracking-widest text-white/70 font-semibold">Daylight Pure</span>
+            
+            <div class="flex items-center space-x-2">
+                <!-- Pure White / Daylight Preset Button -->
+                <button id="btnWhite" class="px-3 py-1.5 text-xs font-medium bg-white text-black rounded-full shadow-sm active:scale-95 transition-all">
+                    Pure White
+                </button>
+                <!-- Mode Switch (Temp / Color Hue) -->
+                <button id="btnToggleMode" class="px-3 py-1.5 text-xs font-medium bg-white/20 hover:bg-white/30 text-white rounded-full active:scale-95 transition-all">
+                    RGB Color
+                </button>
+            </div>
+        </div>
+
+        <!-- Controls Container -->
+        <div class="space-y-5">
+            
+            <!-- Temperature Control Block -->
+            <div id="tempBlock" class="flex flex-col space-y-1.5">
+                <div class="flex justify-between text-xs text-white/60 font-mono">
+                    <span>WARM (2700K)</span>
+                    <span id="tempValue">6500K</span>
+                    <span>COOL (6500K)</span>
+                </div>
+                <input type="range" id="tempSlider" min="2000" max="6500" value="6500" class="w-full cursor-pointer">
+            </div>
+
+            <!-- Custom Hue Color Control Block (Hidden by default, shown in RGB mode) -->
+            <div id="hueBlock" class="flex flex-col space-y-1.5 hidden">
+                <div class="flex justify-between text-xs text-white/60 font-mono">
+                    <span>COLOR SPECTRUM</span>
+                    <span id="hueValue">0°</span>
+                </div>
+                <input type="range" id="hueSlider" min="0" max="360" value="0" class="w-full cursor-pointer">
+            </div>
+
+            <!-- Brightness / Dimmer Control Block -->
+            <div class="flex flex-col space-y-1.5 pt-1">
+                <div class="flex justify-between text-xs text-white/60 font-mono">
+                    <span>BRIGHTNESS</span>
+                    <span id="brightValue">100%</span>
+                </div>
+                <input type="range" id="brightSlider" min="5" max="100" value="100" class="w-full cursor-pointer">
+            </div>
+        </div>
+
+        <!-- Minimal Hint text -->
+        <p class="text-[10px] text-center text-white/40 mt-5 uppercase tracking-wider">Tap screen to hide/show controls</p>
+    </div>
+
+    <script>
+        // DOM Elements
+        const lightPanel = document.getElementById('lightPanel');
+        const touchTarget = document.getElementById('touchTarget');
+        const controlPanel = document.getElementById('controlPanel');
+        const btnWhite = document.getElementById('btnWhite');
+        const btnToggleMode = document.getElementById('btnToggleMode');
+        const tempBlock = document.getElementById('tempBlock');
+        const hueBlock = document.getElementById('hueBlock');
+        const tempSlider = document.getElementById('tempSlider');
+        const hueSlider = document.getElementById('hueSlider');
+        const brightSlider = document.getElementById('brightSlider');
+        const tempValue = document.getElementById('tempValue');
+        const hueValue = document.getElementById('hueValue');
+        const brightValue = document.getElementById('brightValue');
+        const modeLabel = document.getElementById('modeLabel');
+
+        // App State
+        let mode = 'temp'; // 'temp' or 'hue'
+        let tempK = 6500;
+        let hueDeg = 0;
+        let brightness = 100;
+        let uiVisible = true;
+        let idleTimer = null;
+
+        // Color Temperature Conversion Algorithm (Kelvin to RGB)
+        function kelvinToRGB(kelvin) {
+            let temp = kelvin / 100;
+            let red, green, blue;
+
+            if (temp <= 66) {
+                red = 255;
+                green = temp;
+                green = 99.4708025861 * Math.log(green) - 161.1195681661;
+                if (temp <= 19) {
+                    blue = 0;
+                } else {
+                    blue = temp - 10;
+                    blue = 138.5177312231 * Math.log(blue) - 305.0447927307;
+                }
+            } else {
+                red = temp - 60;
+                red = 329.698727446 * Math.pow(red, -0.1332047592);
+                green = temp - 60;
+                green = 288.1221695283 * Math.pow(green, -0.0755148492);
+                blue = 255;
+            }
+
+            return {
+                r: Math.min(255, Math.max(0, Math.round(red))),
+                g: Math.min(255, Math.max(0, Math.round(green))),
+                b: Math.min(255, Math.max(0, Math.round(blue)))
+            };
+        }
+
+        // HSL to RGB conversion helper
+        function hslToRGB(h, s, l) {
+            s /= 100;
+            l /= 100;
+            const k = n => (n + h / 30) % 12;
+            const a = s * Math.min(l, 1 - l);
+            const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+            return {
+                r: Math.round(255 * f(0)),
+                g: Math.round(255 * f(8)),
+                b: Math.round(255 * f(4))
+            };
+        }
+
+        // Update Light Screen Display
+        function updateLight() {
+            let rgb;
+            if (mode === 'temp') {
+                rgb = kelvinToRGB(tempK);
+                modeLabel.textContent = tempK === 6500 ? "Daylight Pure" : `${tempK}K Warmth`;
+            } else {
+                rgb = hslToRGB(hueDeg, 100, 50);
+                modeLabel.textContent = `Hue Accent (${hueDeg}°)`;
+            }
+
+            // Apply light panel background color
+            lightPanel.style.backgroundColor = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
+            // Apply screen brightness dimmer
+            lightPanel.style.opacity = (brightness / 100).toString();
+
+            // Update label indicators
+            tempValue.textContent = `${tempK}K`;
+            hueValue.textContent = `${hueDeg}°`;
+            brightValue.textContent = `${brightness}%`;
+        }
+
+        // Auto Fade UI Controls Management
+        function resetIdleTimer() {
+            showUI();
+            clearTimeout(idleTimer);
+            idleTimer = setTimeout(() => {
+                hideUI();
+            }, 3500); // Fades out after 3.5s of inactivity
+        }
+
+        function hideUI() {
+            uiVisible = false;
+            controlPanel.classList.add('opacity-0', 'translate-y-4', 'pointer-events-none');
+            controlPanel.classList.remove('opacity-100', 'translate-y-0');
+        }
+
+        function showUI() {
+            uiVisible = true;
+            controlPanel.classList.remove('opacity-0', 'translate-y-4', 'pointer-events-none');
+            controlPanel.classList.add('opacity-100', 'translate-y-0');
+        }
+
+        function toggleUI() {
+            if (uiVisible) {
+                hideUI();
+                clearTimeout(idleTimer);
+            } else {
+                resetIdleTimer();
+            }
+        }
+
+        // Event Listeners
+        tempSlider.addEventListener('input', (e) => {
+            tempK = parseInt(e.target.value);
+            updateLight();
+            resetIdleTimer();
+        });
+
+        hueSlider.addEventListener('input', (e) => {
+            hueDeg = parseInt(e.target.value);
+            updateLight();
+            resetIdleTimer();
+        });
+
+        brightSlider.addEventListener('input', (e) => {
+            brightness = parseInt(e.target.value);
+            updateLight();
+            resetIdleTimer();
+        });
+
+        // Toggle Temperature vs Custom Hue Mode
+        btnToggleMode.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (mode === 'temp') {
+                mode = 'hue';
+                tempBlock.classList.add('hidden');
+                hueBlock.classList.remove('hidden');
+                btnToggleMode.textContent = 'Temp Mode';
+            } else {
+                mode = 'temp';
+                hueBlock.classList.add('hidden');
+                tempBlock.classList.remove('hidden');
+                btnToggleMode.textContent = 'RGB Color';
+            }
+            updateLight();
+            resetIdleTimer();
+        });
+
+        // Quick Preset: Pure Daylight White
+        btnWhite.addEventListener('click', (e) => {
+            e.stopPropagation();
+            mode = 'temp';
+            tempK = 6500;
+            brightness = 100;
+            tempSlider.value = 6500;
+            brightSlider.value = 100;
+            tempBlock.classList.remove('hidden');
+            hueBlock.classList.add('hidden');
+            btnToggleMode.textContent = 'RGB Color';
+            updateLight();
+            resetIdleTimer();
+        });
+
+        // Touch anywhere on full screen to toggle/reset UI
+        touchTarget.addEventListener('click', () => {
+            toggleUI();
+        });
+
+        controlPanel.addEventListener('click', (e) => {
+            e.stopPropagation();
+            resetIdleTimer();
+        });
+
+        // Initialize state and auto-hide timer on load
+        window.onload = () => {
+            updateLight();
+            resetIdleTimer();
+        };
+    </script>
+</body>
+</html>
